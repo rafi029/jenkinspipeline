@@ -1,26 +1,32 @@
-pipeline {
-agent any
-stages {
-stage(‘Build Application’) {
-steps {
-bat ‘mvn clean install’
-}
-}
-stage('Test') {
-steps {
-echo ‘Application in Testing Phase…’
-bat 'mvn test'
-}
-}
-stage('Deploy CloudHub') {
-environment {
-ANYPOINT_CREDENTIALS = credentials(‘anypointPlatform’)
-}
-steps {
-echo ‘Deploying mule project due to the latest code commit…’
-echo ‘Deploying to the configured environment….’
-bat ‘mvn package deploy -DmuleDeploy -Dusername=${ANYPOINT_CREDENTIALS_USR} -Dpassword=${ANYPOINT_CREDENTIALS_PSW} -DworkerType=Micro -Dworkers=1 -Dregion=us-west-2’
-}
-}
-}
-}
+pipeline{
+        agent any  
+        environment{
+	    Docker_tag = getDockerTag()
+        }
+        
+        stages{
+
+
+              stage('Quality Gate Statuc Check'){
+
+               agent {
+                docker {
+                image 'maven'
+                args '-v $HOME/.m2:/root/.m2'
+                }
+            }
+                  steps{
+                      script{
+                      withSonarQubeEnv('sonarserver') { 
+                      sh "mvn sonar:sonar"
+                       }
+                      timeout(time: 1, unit: 'HOURS') {
+                      def qg = waitForQualityGate()
+                      if (qg.status != 'OK') {
+                           error "Pipeline aborted due to quality gate failure: ${qg.status}"
+                      }
+                    }
+		    sh "mvn clean install"
+                  }
+                }  
+              }
